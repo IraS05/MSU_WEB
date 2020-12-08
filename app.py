@@ -1,18 +1,25 @@
 import flask
 import json
-import core
+#import core
 import secrets
+import database
 
 
 app = flask.Flask("app")
+
+
+db = database.Database()
+db.load_db()
 
 count = 0
 
 @app.route("/auth" , methods = ["GET" , "POST"])
 def login():
+
+
     if flask.request.method == "GET":
         #считываем куки
-        print(flask.request.cookies.get('foo'))
+        q = flask.request.cookies.get('sid')
         
         res = flask.make_response(flask.render_template("login.html"))
 
@@ -20,49 +27,48 @@ def login():
 
     elif flask.request.method == "POST":
         data = flask.request.form
+        auth_user = database.User(data['login'] , data['pass'])
+        result = db.auth(auth_user)
 
-        try :
-            with open('Database/' + data['login'] + '.txt' , 'r',encoding='utf-8' ) as f:
-                user = json.loads( f.read() )
-                if user['pass'] == data['pass']:
-                    response = flask.make_response(flask.render_template("login.html"))
-                    
-                    key = str(secrets.token_hex())
-                    print(key)
-                    response.set_cookie('sid' , key)
+        if result[0]:
+            response = flask.make_response(flask.redirect(f"/profile/{data['login']}"))
+            response.set_cookie('sid' , result[1])
+            return response
+        else:
+            return (result[1])
 
-                    return response
-                else:
-                    return "Неправильный логин или пароль"
-        except :
-            print("Произошла ошибка")
-            return "Неправильный логин или пароль"
 
 @app.route("/reg" , methods = ["GET" , "POST"])
 def reg():
     if flask.request.method == "GET":
         return flask.render_template("reg.html")
 
-    if flask.request.method == "POST":
+    elif flask.request.method == "POST":
         data = flask.request.form
         print(data)
+        new_user = database.User(data['login'] , data['pass'])
+        result = db.registration(new_user)
+        print("123")
+        if result[0]:
+            return 'все ок'
+        else: 
+            return result[1]
 
-        with open("Database/"+data['login'] + ".txt", "w" , encoding="utf-8") as f:
-            f.write( json.dumps(data) )
-
-        return "Привет" + data["login"]
 
 #Для тестирования функций
-@app.route("/test/<id>" , methods = ["GET" , "POST"])
+@app.route("/profile/<id>" , methods = ["GET" , "POST"])
 def test(id):
-    print(id)
-    profile = core.profile.Profile(id)
-    return flask.render_template('profile.html' , data = profile.get() )  
+    q = flask.request.cookies.get('sid')
+
+    return flask.render_template('profile.html' )  
+
 
 @app.route("/" , methods = ["GET"])
 def index():
     if flask.request.method == "GET":
-        print("пришел")
+        
+        q = flask.request.cookies.get('sid')
+
         data = flask.request.args
         if not data:
            #ген случайных wtl
@@ -80,5 +86,12 @@ def index():
 
         return flask.render_template('peoples.html' , data = result)  
 
-app.run()
+@app.route("/secret" , methods = ["GET"])
+def view():
+    db.view()
+    return " "
 
+app.run(debug=True)
+
+    # определить логику пропуска данной странички , если обнаружена сессия
+    # настроить редирект после регистрации на профиль пользователя
